@@ -1,0 +1,7 @@
+- name: OracleDB
+  gather_facts: true
+  hosts: OracleDB
+  any_errors_fatal: true
+  become: true
+  roles:
+    - swarm

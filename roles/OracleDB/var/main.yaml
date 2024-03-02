@@ -1,0 +1,3 @@
+oracle_user: oracle
+oracle_group: oinstall
+oracle_os_user_pass: oracle@123

@@ -1,0 +1,125 @@
+
+- name: mount /mnt
+  shell: |
+    mount -o loop /dev/sr0 /mnt 
+  ignore_errors: true
+
+
+- name: Create a directory with custom attributes
+  ansible.builtin.file:
+    path: /server
+    state: directory
+    owner: css
+    group: css
+    mode: 0775
+
+
+- name: server preparation
+  copy:
+    src: "{{ item }}"
+    dest: /etc/yum.repos.d/
+    mode: 0777
+  with_fileglob:
+    - /server/playbooks/redis/roles/redis/template/*.repo
+
+- name: Disable SELinux
+  selinux: state=disabled
+- name: Disable Firewall Deamon (firewalld)
+  shell: 'firewall-cmd --zone=public --add-port=5500/tcp --permanent'
+
+
+
+# ==> Create users/groups
+- name: Create groups
+  group: name={{ oracle_group }} state=present 
+- name: Create user
+  user: name={{ oracle_user }} groups={{ oracle_group }} password={{ oracle_os_user_pass }}
+
+  ## java preparation
+- name: Copy jdk archive to host
+  copy: src=jdk-17.0.6_linux-x64_bin.tar.gz dest=/server/
+
+- name: Unarchive java archive
+  ansible.builtin.unarchive:
+    src:  /server/jdk-17.0.6_linux-x64_bin.tar.gz
+    dest:  /server/
+    owner: oracle
+    group: oracle
+    mode: 0777
+    remote_src: yes
+
+
+ 
+
+  ## oracle preparation
+
+- name: Copy oracle archive to host
+  copy: src=oracle-database-preinstall-19c-1.0-2.el8.x86_64.rpm  dest=/server/
+
+
+- name: oracle installation 
+  command: |
+     yum -y localinstall /server/oracle-database-preinstall-19c-1.0-2.el8.x86_64.rpm 
+
+
+- name: change jdk dir name
+  command: 'mv /server/jdk-17.0.6 /server/java'
+ 
+- name: Copy env file
+  copy: src=env.sh  dest=/server/
+  become: true
+  become_user: oracle
+
+- name: Add a line to a file ~/.bash_profile
+  lineinfile:
+    path: ~/.bash_profile
+    line: source /server/env.sh
+  become: true
+  become_user: oracle
+
+
+- name: Create a directory with custom attributes
+  ansible.builtin.file:
+    path: /u01/app/oracle/product/19.0.0/dbhome_1/
+    state: directory
+    owner: oracle
+    group: oinstall
+    mode: 0775
+
+- name: Copy V982063-01.zip
+  copy: src=V982063-01.zip  dest=/u01/app/oracle/product/19.0.0/dbhome_1/
+
+
+
+- name: Copy db.rsp
+  copy: src=db.rsp  dest=/u01/app/oracle/product/19.0.0/dbhome_1/
+  become: true
+  become_user: oracle
+
+- name: Unarchive V982063-01.zip
+  ansible.builtin.unarchive:
+    src:  /u01/app/oracle/product/19.0.0/dbhome_1/V982063-01.zip
+    dest:  /u01/app/oracle/product/19.0.0/dbhome_1/
+    owner: oracle
+    group: oinstall
+    mode: 0777
+    remote_src: yes
+
+- name: add oracle to oper
+  command: 'usermod -aG oper oracle'
+
+- name: run runInstaller
+  command: '/u01/app/oracle/product/19.0.0/dbhome_1/runInstaller -silent -responseFile /u01/app/oracle/product/19.0.0/dbhome_1/db.rsp'
+  become: true
+  become_user: oracle
+
+- name: add oracle to oper
+  command: 'lsnrctl start'
+  become: true
+  become_user: oracle
+
+- name: after installation 1
+  command: '/u01/app/oraInventory/orainstRoot.sh'
+
+- name: after installation 2
+  command: '/u01/app/oracle/product/19.0.0/dbhome_1/root.sh'
